@@ -39,6 +39,7 @@ private:
 
 private:
 	static int query_user(const char * id, const char * passwd);
+	static void query_friends_list(string userid, int client_sockfd);
 
 public:
 	void initServer();

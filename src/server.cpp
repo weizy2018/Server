@@ -64,7 +64,7 @@ void Server::acceptUsers() {
 }
 void * Server::startThread(void * sockfd) {
 	int client_sockfd = *(int*)sockfd;
-	struct SendContext context;
+	struct SendContent context;
 	memset(&context, 0, sizeof(context));
 	while (context.type != EXIT_ACTION) {
 		//if ((recvbytes = read(client_sockfd, buf, 100)) == -1) {
@@ -86,10 +86,9 @@ void * Server::startThread(void * sockfd) {
 				} else {
 					write(client_sockfd, LOGIN_SUCCESS, 10);
 				}
-				/*
-				char msg[10] = LOGIN_FAIL;
-				write(client_sockfd, msg, 10);
-				*/
+				//获取将该用户的好友列表并发送
+				users->insert(pair<string, int>(string(account), client_sockfd));
+				query_friends_list(account, client_sockfd);
 
 			} else if (context.type == EXIT_ACTION) {
 				cout << "======================exit======================" << endl;
@@ -133,6 +132,44 @@ int Server::query_user(const char * id, const char * passwd) {
 	mysql_close(&conn);
 
 	return 0;
+}
+
+void Server::query_friends_list(string userid, int client_sockfd) {
+	cout << "query friends list: " << userid << endl;
+	MYSQL conn;
+	mysql_init(&conn);
+	if(mysql_real_connect(&conn,"localhost",USER,PASSWD,DATABASE,0,NULL,CLIENT_FOUND_ROWS) == NULL) {
+		cout << "connect fail!!!" << endl;
+		return;
+	}
+
+	string sql = "select friendid from friends where userid = '";
+	sql.append(userid);
+	sql.append("'");
+
+	if (mysql_query(&conn, sql.c_str()) != 0) {
+		cout << "query error" << endl;
+		return;
+	}
+
+	MYSQL_RES * result = mysql_store_result(&conn);
+	MYSQL_ROW row;
+	while ((row = mysql_fetch_row(result)) != NULL) {
+		friends f;
+		strcpy(f.friendid, row[0]);
+		f.flag = 0;
+		cout << row[0] << endl;
+		write(client_sockfd, &f, sizeof(f));
+	}
+	//发送作为结束的标志
+	friends f_end;
+	f_end.flag = END_FLAG;
+	write(client_sockfd, &f_end, sizeof(f_end));
+
+	cout << "friend list query OK!" << endl;
+
+	mysql_free_result(result);
+	mysql_close(&conn);
 }
 
 
