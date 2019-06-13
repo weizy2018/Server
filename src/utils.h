@@ -21,7 +21,7 @@
 #define MESSAGE_LENGTH          205
 #define TIME_LENGTH				22
 
-#define PORT                    6688
+#define PORT                    8888
 #define SERVER_ADDR             "127.0.0.1"
 
 #define LOGIN_SUCCESS           "success"

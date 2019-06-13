@@ -15,7 +15,7 @@
 
 using namespace std;
 
-map<string, int> * Server::users = new map<string, int>();
+map<string, int>  Server::users;
 Server::Server() {
 	server_sockfd = 0;
 }
@@ -24,7 +24,7 @@ Server::~Server() {
 
 }
 void Server::release() {
-	delete users;
+
 }
 
 void Server::initServer() {
@@ -64,19 +64,17 @@ void Server::acceptUsers() {
 }
 void * Server::startThread(void * sockfd) {
 	int client_sockfd = *(int*)sockfd;
-	struct SendContent context;
-	memset(&context, 0, sizeof(context));
-	while (context.type != EXIT_ACTION) {
-		//if ((recvbytes = read(client_sockfd, buf, 100)) == -1) {
-		cout << "running..." << endl;
-		if (read(client_sockfd, &context, sizeof(context)) == 0) {
+	struct SendContent content;
+	memset(&content, 0, sizeof(content));
+	while (content.type != EXIT_ACTION) {
+		if (read(client_sockfd, &content, sizeof(content)) == 0) {
 			cout << "read client_sockfd failed" << endl;
 			break;
 		} else {
-			if (context.type == LOGIN_ACTION) {
+			if (content.type == LOGIN_ACTION) {
 				cout << "======================login======================" << endl;
-				char * account = context.sender;
-				char * passwd = context.receiver;
+				char * account = content.sender;
+				char * passwd = content.receiver;
 
 				cout << "account: " << account << " passwd = " << passwd << endl;
 
@@ -87,17 +85,34 @@ void * Server::startThread(void * sockfd) {
 					write(client_sockfd, LOGIN_SUCCESS, 10);
 				}
 				//获取将该用户的好友列表并发送
-				users->insert(pair<string, int>(string(account), client_sockfd));
+				users.insert(pair<string, int>(string(account), client_sockfd));
 				query_friends_list(account, client_sockfd);
+				//获取离线时未接收的消息
+				query_unreceive_message(account, client_sockfd);
 
-			} else if (context.type == EXIT_ACTION) {
+			} else if (content.type == EXIT_ACTION) {
 				cout << "======================exit======================" << endl;
 				break;
-			} else if (context.type == SEND_MESSAGE_ACTION) {
+			} else if (content.type == SEND_MESSAGE_ACTION) {
 				cout << "======================send message======================" << endl;
+				cout << content.sender << " " << content.receiver << " " << content.message << " " << content.sendTime << endl;
+
+				auto it = users.find(content.receiver);
+				if (it != users.end()) {				//发送的客户端在线，直接发送给客户端
+					write(users[content.receiver], &content, sizeof(content));
+				} else {								//用户不在线, 将数据保存到数据库中
+					saveMessage(content);
+				}
 			}
 		}
-		memset(&context, 0, sizeof(context));
+		memset(&content, 0, sizeof(content));
+	}
+	//将client_sockfd从users中删除
+	for (auto it = users.begin(); it != users.end(); it++) {
+		if (it->second == client_sockfd) {
+			users.erase(it->first);
+			break;
+		}
 	}
 	close(client_sockfd);
 	return NULL;
@@ -107,7 +122,7 @@ int Server::query_user(const char * id, const char * passwd) {
 	MYSQL conn;
 	mysql_init(&conn);
 	if(mysql_real_connect(&conn,"localhost",USER,PASSWD,DATABASE,0,NULL,CLIENT_FOUND_ROWS) == NULL) {
-		cout << "connect fail!!!" << endl;
+		cout << "mysql connect fail!!!" << endl;
 		return -1;
 	}
 	string query = "select * from user where id = '";
@@ -139,7 +154,7 @@ void Server::query_friends_list(string userid, int client_sockfd) {
 	MYSQL conn;
 	mysql_init(&conn);
 	if(mysql_real_connect(&conn,"localhost",USER,PASSWD,DATABASE,0,NULL,CLIENT_FOUND_ROWS) == NULL) {
-		cout << "connect fail!!!" << endl;
+		cout << "mysql connect fail!!!" << endl;
 		return;
 	}
 
@@ -172,6 +187,78 @@ void Server::query_friends_list(string userid, int client_sockfd) {
 	mysql_close(&conn);
 }
 
+void Server::query_unreceive_message(string userid, int client_sockfd) {
+	cout << "query unreceive message" << endl;
+	MYSQL conn;
+	mysql_init(&conn);
+	if (mysql_real_connect(&conn, "localhost", USER, PASSWD, DATABASE, 0, NULL, CLIENT_FOUND_ROWS) == NULL) {
+		cout << "mysql connect fail!!!" << endl;
+		return;
+	}
+	//select * from receive where receiver = '123' order by receive_date
+	string sql = "select * from receive where receiver = '";
+	sql.append(userid);
+	sql.append("' ");
+	sql.append("order by receive_date");
+
+	if (mysql_query(&conn, sql.c_str()) != 0) {
+		cout << "query error" << endl;
+		return;
+	}
+
+	MYSQL_RES * result = mysql_store_result(&conn);
+	MYSQL_ROW row;
+	while ((row = mysql_fetch_row(result)) != NULL) {
+		SendContent content;
+		strcpy(content.receiver, userid.c_str());
+		strcpy(content.sender, row[2]);
+		strcpy(content.message, row[3]);
+		strcpy(content.sendTime, row[4]);
+		cout << row[2] << " " << row[3] << " " << row[4] << endl;
+		content.type = 0;
+		write(client_sockfd, &content, sizeof(content));
+	}
+	//发送个结束标志
+	SendContent cont;
+	cont.type = END_FLAG;
+	write(client_sockfd, &cont, sizeof(cont));
+	cout << "query OK" << endl;
+
+	//删除数据库中的聊天记录，服务器不再保留这些聊天记录
+
+	mysql_free_result(result);
+	mysql_close(&conn);
+}
+
+void Server::saveMessage(const SendContent  content) {
+	cout << "save message" << endl;
+	MYSQL conn;
+	mysql_init(&conn);
+	if (mysql_real_connect(&conn, "localhost", USER, PASSWD, DATABASE, 0, NULL, CLIENT_FOUND_ROWS) == NULL) {
+		cout << "mysql connect fail!!!" << endl;
+		return;
+	}
+	//INSERT INTO `chat`.`receive` (`receiver`, `sender`, `content`, `receive_date`) VALUES ('zhangsan', '123', 'I\'m 123', '2019-6-13 12:23:30');
+
+	string sql = "INSERT INTO receive (receiver, sender, content, receive_date) VALUES ('";
+	sql += content.receiver;
+	sql += "', '";
+	sql += content.sender;
+	sql += "', '";
+	sql += content.message;
+	sql += "', '";
+	sql += content.sendTime;
+	sql += "')";
+
+	cout << sql << endl;
+
+	if (mysql_query(&conn, sql.c_str()) != 0) {
+		cout << "query error" << endl;
+		return;
+	}
+	cout << "save OK" << endl;
+	mysql_close(&conn);
+}
 
 
 

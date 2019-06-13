@@ -20,6 +20,8 @@
 #include <sys/shm.h>
 #include <time.h>
 
+#include "utils.h"
+
 #include <map>
 using namespace std;
 
@@ -30,7 +32,7 @@ public:
 	static void release();
 
 private:
-	static map<string, int> * users;
+	static map<string, int> users;
 	int server_sockfd;
 	struct sockaddr_in server_sockaddr;
 
@@ -40,6 +42,8 @@ private:
 private:
 	static int query_user(const char * id, const char * passwd);
 	static void query_friends_list(string userid, int client_sockfd);
+	static void query_unreceive_message(string userid, int client_sockfd);
+	static void saveMessage(const SendContent  content);
 
 public:
 	void initServer();
