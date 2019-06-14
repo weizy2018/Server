@@ -225,6 +225,17 @@ void Server::query_unreceive_message(string userid, int client_sockfd) {
 	cout << "query OK" << endl;
 
 	//删除数据库中的聊天记录，服务器不再保留这些聊天记录
+	//测试阶段不做删除，注释掉
+	/*
+	sql = "delete from receive where receiver='";
+	sql.append(userid);
+	sql.append("'");
+
+	if (mysql_query(&conn, sql.c_str()) != 0) {
+		cout << "message delete error" << endl;
+		return;
+	}
+	*/
 
 	mysql_free_result(result);
 	mysql_close(&conn);
