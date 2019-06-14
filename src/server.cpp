@@ -27,19 +27,21 @@ void Server::release() {
 
 }
 
+//服务器端初始化socket
 void Server::initServer() {
+	//新建socket对象
 	server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	server_sockaddr.sin_family = AF_INET;
 	server_sockaddr.sin_port = htons(PORT);
 	server_sockaddr.sin_addr.s_addr = INADDR_ANY;
 
 	int server_len = sizeof(server_sockaddr);
-
+	//服务器端绑定socket
 	if (bind(server_sockfd, (struct sockaddr *) &server_sockaddr, server_len) == -1) {
 		perror("bind fail !!!");
 		exit(1);
 	}
-
+	//监听
 	if (listen(server_sockfd, 5) == -1) {
 		perror("listen fail !!!");
 		exit(1);
@@ -52,12 +54,14 @@ void Server::acceptUsers() {
 	unsigned int client_len = sizeof(client_sockaddr);
 	int client_sockfd;
 	cout << "accepting..." << endl;
+	//死循环接收客户端的连接
 	while (true) {
 		if ((client_sockfd = accept(server_sockfd, (struct sockaddr*)&client_sockaddr, &client_len)) == -1) {
 			perror("accept error");
 			exit(1);
 		}
 		printf("%s login service\n", inet_ntoa(client_sockaddr.sin_addr));
+		//每当一个客户端连接就开启一个线程对该客户端进行处理
 		pthread_t userId;
 		pthread_create(&userId, NULL, startThread, &client_sockfd);
 	}
@@ -66,11 +70,14 @@ void * Server::startThread(void * sockfd) {
 	int client_sockfd = *(int*)sockfd;
 	struct SendContent content;
 	memset(&content, 0, sizeof(content));
+	//接收客户端发来的消息
 	while (content.type != EXIT_ACTION) {
 		if (read(client_sockfd, &content, sizeof(content)) == 0) {
 			cout << "read client_sockfd failed" << endl;
 			break;
 		} else {
+			//根据content.type来判断客户端发来的是什么消息（登录消息/聊天消息）
+			//以便做出不同的处理
 			if (content.type == LOGIN_ACTION) {
 				cout << "======================login======================" << endl;
 				char * account = content.sender;
@@ -226,7 +233,7 @@ void Server::query_unreceive_message(string userid, int client_sockfd) {
 
 	//删除数据库中的聊天记录，服务器不再保留这些聊天记录
 	//测试阶段不做删除，注释掉
-	/*
+
 	sql = "delete from receive where receiver='";
 	sql.append(userid);
 	sql.append("'");
@@ -235,7 +242,7 @@ void Server::query_unreceive_message(string userid, int client_sockfd) {
 		cout << "message delete error" << endl;
 		return;
 	}
-	*/
+
 
 	mysql_free_result(result);
 	mysql_close(&conn);
