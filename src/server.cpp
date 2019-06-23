@@ -90,12 +90,13 @@ void * Server::startThread(void * sockfd) {
 					write(client_sockfd, LOGIN_FAIL, 10);
 				} else {
 					write(client_sockfd, LOGIN_SUCCESS, 10);
+					//获取将该用户的好友列表并发送
+					users.insert(pair<string, int>(string(account), client_sockfd));
+					query_friends_list(account, client_sockfd);
+					//获取离线时未接收的消息
+					query_unreceive_message(account, client_sockfd);
 				}
-				//获取将该用户的好友列表并发送
-				users.insert(pair<string, int>(string(account), client_sockfd));
-				query_friends_list(account, client_sockfd);
-				//获取离线时未接收的消息
-				query_unreceive_message(account, client_sockfd);
+
 
 			} else if (content.type == EXIT_ACTION) {
 				cout << "======================exit======================" << endl;
@@ -109,6 +110,19 @@ void * Server::startThread(void * sockfd) {
 					write(users[content.receiver], &content, sizeof(content));
 				} else {								//用户不在线, 将数据保存到数据库中
 					saveMessage(content);
+				}
+			} else if (content.type == REGISTER_ACTION) {
+				cout << "========================register==========================" << endl;
+				char * account = content.sender;
+				char * passwd = content.receiver;
+				cout << "account: " << account << "  password: " << passwd << endl;
+				int result = userRegister(account, passwd);
+				if (result != 0) {
+					//失败
+					write(client_sockfd, REGISTER_FAIL, 10);
+				} else {
+					//成功
+					write(client_sockfd, REGISTER_SUCCESS, 10);
 				}
 			}
 		}
@@ -278,7 +292,40 @@ void Server::saveMessage(const SendContent  content) {
 	mysql_close(&conn);
 }
 
+int Server::userRegister(const char * id, const char * passwd) {
+	MYSQL conn;
+	mysql_init(&conn);
+	if (mysql_real_connect(&conn, "localhost", USER, PASSWD, DATABASE, 0, NULL, CLIENT_FOUND_ROWS) == NULL) {
+		cout << "mysql connect fail!!!" << endl;
+		return -1;
+	}
+	//先查找该账号是否已经存在
+	string query = "select * from user where id = '";
+	query.append(id).append("'");
 
+	if (mysql_query(&conn, query.c_str()) != 0) {
+		cout << "query error" << endl;
+		return -1;
+	}
+	MYSQL_RES * result = mysql_store_result(&conn);
+	MYSQL_ROW row;
+	//结果集不是空表明用户该账号已经存在
+	if ((row = mysql_fetch_row(result)) != NULL) {
+		cout << "账号已经存在" << endl;
+		return -1;
+	}
+
+	//进行注册
+	//INSERT INTO `chat`.`user` (`id`, `passwd`) VALUES ('hello', '123');
+	string sql = "insert into user (id, passwd) values ('";
+	sql.append(id).append("', '");
+	sql.append(passwd).append("')");
+	if (mysql_query(&conn, sql.c_str()) != 0) {
+		cout << "插入失败" << endl;
+		return -1;
+	}
+	return 0;
+}
 
 
 

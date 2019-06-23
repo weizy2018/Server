@@ -44,6 +44,7 @@ private:
 	static void query_friends_list(string userid, int client_sockfd);
 	static void query_unreceive_message(string userid, int client_sockfd);
 	static void saveMessage(const SendContent  content);
+	static int userRegister(const char * id, const char * passwd);
 
 public:
 	void initServer();

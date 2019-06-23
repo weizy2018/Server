@@ -14,6 +14,7 @@
 #define LOGIN_ACTION            1
 #define SEND_MESSAGE_ACTION     2
 #define EXIT_ACTION             3
+#define REGISTER_ACTION         4
 
 #define TYPE_LENGTH             6
 #define ACCOUNT_LENGTH          16
@@ -26,6 +27,8 @@
 
 #define LOGIN_SUCCESS           "success"
 #define LOGIN_FAIL              "fail"
+#define REGISTER_SUCCESS		"success"
+#define REGISTER_FAIL 			"fail"
 
 #define USER 					"root"
 #define PASSWD 					"123456"
